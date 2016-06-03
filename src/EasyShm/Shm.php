@@ -24,15 +24,10 @@ class Shm {
 
     protected $shmSize;
 
-    protected $shmActualSize;
-
-    protected $shmDataAreaOffset;
-
     protected $tempFilename;
 
     public function __construct($key = null, $size = 0, $mode = 0644, $flag = self::CREATE_READ_WRITE)
     {
-        $this->shmSize = $this->suffixSizeToByteLength($size);
         $this->shmMode = $mode;
         $this->shmFlag = $flag;
 
@@ -41,14 +36,11 @@ class Shm {
             $key = static::key($this->tempFilename);
         }
 
-        $this->shmDataAreaOffset = $this->memoryStructureSize();
-        $this->shmActualSize = $this->shmSize + $this->shmDataAreaOffset;
-        $this->shmID = shmop_open($key, $this->shmFlag, $this->shmMode, $this->shmActualSize);
+        $this->shmSize = $this->suffixSizeToByteLength($size);
+        $this->shmID = shmop_open($key, $this->shmFlag, $this->shmMode, $this->shmSize);
         if (false === $this->shmID) {
             throw new Exception('Shard Memory open fail');
         }
-
-        $this->memoryStructureInit();
     }
 
     public function __destruct()
@@ -62,20 +54,19 @@ class Shm {
 
     public function size()
     {
-        return $this->shmSize;
-    }
+        if (null === $this->shmSize) {
+            $this->shmSize = shmop_size($this->shmID);
+        }
 
-    public function actualSize()
-    {
-        return $this->shmActualSize;
+        return $this->shmSize;
     }
 
     public function read($start, $length = null)
     {
-        $offset = $start >= 0 ? $this->shmDataAreaOffset + $start : $this->shmActualSize + $start;
+        $offset = $start >= 0 ? $start : $this->shmSize + $start;
 
         if (null === $length) {
-            $length = $start >= 0 ? $this->shmSize - $start : $this->shmActualSize - $offset;
+            $length = $start >= 0 ? $this->shmSize - $start : -($start);
         }
 
         return shmop_read($this->shmID, $offset, $length);
@@ -83,7 +74,7 @@ class Shm {
 
     public function write($start, $data)
     {
-        $offset = $start >= 0 ? $this->shmDataAreaOffset + $start : $this->shmActualSize + $start;
+        $offset = $start >= 0 ? $start : $this->shmSize + $start;
 
         return shmop_write($this->shmID, $data, $offset);
     }
@@ -98,33 +89,12 @@ class Shm {
         return ftok($filePath, 'n');
     }
 
-    protected function memoryStructureInit()
-    {
-        if ($this->shmFlag == self::READ || $this->shmFlag == self::READ_WRITE) {
-            $result = unpack('L2', shmop_read($this->shmID, 0, $this->shmDataAreaOffset));
-            $this->shmSize = $result[0];
-            $this->shmActualSize = $result[0] + $this->memoryStructureSize();
-            $this->shmDataAreaOffset = $result[1];
-        } else {
-            $binaryHeader = pack('L2', $this->shmSize, $this->shmDataAreaOffset);
-            shmop_write($this->shmID, $binaryHeader, 0);
-        }
-    }
-
-    protected function memoryStructureSize()
-    {
-        return array_sum([
-            'size'   => 2,
-            'offset' => 2,
-        ]);
-    }
-
     protected function suffixSizeToByteLength($size)
     {
         if (is_numeric($size)) {
             return $size;
-        } elseif ( ! preg_match('/^(\d+)([a-zA-Z]+)$/', $size, $match)) {
-            throw new Exception('Wrong memory size parameter');
+        } elseif (!preg_match('/^(\d+)([a-zA-Z]+)$/', $size, $match)) {
+            throw new Exception("Wrong memory size parameter \"{$size}\"");
         }
 
         $size = $match[1];
