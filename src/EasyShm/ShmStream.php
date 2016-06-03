@@ -8,6 +8,8 @@ namespace Panlatent\EasyShm;
 
 class ShmStream {
 
+    protected static $protocol;
+
     /**
      * @var \Panlatent\EasyShm\Shm
      */
@@ -50,7 +52,14 @@ class ShmStream {
 
     public static function register($protocol = 'shm')
     {
+        static::$protocol = $protocol;
+
         return stream_wrapper_register($protocol, get_called_class());
+    }
+
+    public static function unregister()
+    {
+        return stream_wrapper_unregister(static::$protocol);
     }
 
     public function stream_open($path, $mode, $options, &$opened_path)
@@ -196,5 +205,5 @@ class ShmStream {
 
         return isset($params[$param]) ? $params[$param] : $default;
     }
-    
+
 }
