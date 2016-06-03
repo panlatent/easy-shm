@@ -26,7 +26,7 @@ class Shm {
 
     protected $tempFilename;
 
-    public function __construct($key = null, $size = 0, $mode = 0644, $flag = self::CREATE_READ_WRITE)
+    public function __construct($key = null, $size = 0, $mode = 0660, $flag = self::CREATE_READ_WRITE)
     {
         $this->shmMode = $mode;
         $this->shmFlag = $flag;
